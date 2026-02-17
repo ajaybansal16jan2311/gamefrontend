@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getPublicCurrentResult,
@@ -10,8 +11,20 @@ import {
   type PublicCurrentResult,
   type PublicNowResponse,
 } from "@/lib/api";
+import { useSpinEngine } from "./useSpinEngine";
 
 const IST = "Asia/Kolkata";
+
+/** Today’s date in IST as YYYY-MM-DD for date input default */
+function getTodayISTYYYYMMDD(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: IST });
+}
+
+/** Format YYYY-MM-DD to DD/MM/YYYY for display */
+function formatDateDDMMYYYY(yyyyMmDd: string): string {
+  const [y, m, d] = yyyyMmDd.split("-");
+  return d && m && y ? `${d}/${m}/${y}` : yyyyMmDd;
+}
 
 /** Result number colour cycle – JS-driven so it’s never overridden by Tailwind */
 const RESULT_COLORS = [
@@ -215,14 +228,22 @@ export default function LivePage() {
     prevResultKeyRef.current = key;
   }, [currentResult?.resultNumber, currentResult?.fullDateTime, queryClient]);
 
+  const [singleDate, setSingleDate] = useState<string>(() => getTodayISTYYYYMMDD());
+  const fromDate = singleDate || undefined;
+  const toDate = singleDate || undefined;
+
   const { data: pastData } = useQuery({
-    queryKey: ["public", "past-results", 1],
-    queryFn: () => getPublicPastResults({ page: 1, limit: 10 }),
+    queryKey: ["public", "past-results", 1, fromDate, toDate],
+    queryFn: () =>
+      getPublicPastResults({
+        page: 1,
+        limit: 50,
+        ...(fromDate && toDate ? { fromDate, toDate } : {}),
+      }),
   });
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
-      <div className="pointer-events-none absolute inset-0 z-0 live-page-glow" aria-hidden />
+    <main className="relative min-h-screen overflow-hidden bg-slate-900 text-white">
       {showPartyPopper && <FullPagePartyPopper />}
 
       <TopSection
@@ -233,43 +254,77 @@ export default function LivePage() {
         showNextGameMessage={showNextGameMessage}
       />
 
-      {/* Rest of content below fold - dark theme (does not re-render every second) */}
-      <div className="relative z-10 mx-auto max-w-2xl bg-slate-950 px-4 py-6 sm:py-8">
-        {/* Winning number / Latest result */}
-        <section className="mt-6">
+      {/* Rest of content below fold – centered with space left & right */}
+      <section className="relative z-10 w-full bg-slate-900 px-3 py-4 sm:px-6 sm:py-6 md:px-8 md:py-8 lg:px-10">
+        <div className="mx-auto max-w-2xl md:max-w-3xl">
           <WinningNumberCard result={currentResult} />
-        </section>
+        </div>
+      </section>
 
-        {/* Previous draws */}
-        <section className="mt-8">
-          <h2 className="mb-3 text-center text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+      {/* Previous draws – centered with space left & right */}
+      <section className="relative z-10 w-full bg-slate-900 px-3 py-4 sm:px-6 sm:py-6 md:px-8 md:py-8 lg:px-10">
+        <div className="mx-auto max-w-2xl md:max-w-3xl">
+          <h2 className="mb-2 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 sm:mb-3 sm:text-xs">
             Previous draws
           </h2>
-          {pastData?.items && pastData.items.length > 0 ? (
-            <div className="flex flex-wrap justify-center gap-2">
-              {pastData.items.map((item) => (
-                <div
-                  key={item._id ?? `${item.fullDateTime}-${item.resultNumber}`}
-                  className="rounded-lg border border-slate-600/50 bg-slate-800/60 px-4 py-2.5 backdrop-blur-sm transition live-card-3d live-card-glow hover:border-slate-500 hover:bg-slate-700/50"
-                >
-                  <span className="font-mono text-xl font-bold text-amber-400">
-                    {item.resultNumber}
-                  </span>
-                  <span className="ml-2 text-xs text-slate-400">
+
+          <div className="live-date-filters mb-4 rounded-xl border border-slate-700/50 bg-slate-800/40 px-3 py-3 shadow-[0_4px_16px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.04)] [color-scheme:dark] sm:px-4 sm:py-4">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+            <label className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 sm:text-xs">
+                See previous result
+              </span>
+              <input
+                type="date"
+                value={singleDate}
+                onChange={(e) => setSingleDate(e.target.value)}
+                className="live-date-input w-full min-w-[120px] sm:min-w-[140px] sm:w-auto"
+              />
+            </label>
+          </div>
+        </div>
+
+        <p className="mb-3 text-center text-[10px] text-slate-500 sm:mb-4">
+          {singleDate
+            ? `Showing results for ${formatDateDDMMYYYY(singleDate)} (IST)`
+            : "Showing latest results. Select a date above to see past draws."}
+        </p>
+
+        {pastData?.items && pastData.items.length > 0 ? (
+          <div className="flex w-full flex-col gap-2">
+            {pastData.items.map((item) => (
+              <div
+                key={item._id ?? `${item.fullDateTime}-${item.resultNumber}`}
+                className="w-full rounded-lg border border-slate-600/50 bg-slate-800/60 px-3 py-2.5 backdrop-blur-sm transition live-card-3d live-card-glow hover:border-slate-500 hover:bg-slate-700/50 sm:px-6 sm:py-4"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[10px] text-slate-400 sm:text-xs md:text-sm">
                     {formatResultDateTime(item.fullDateTime)}
                   </span>
+                  <span className="font-mono text-lg font-bold text-amber-400 sm:text-xl md:text-2xl">
+                    {item.resultNumber}
+                  </span>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="rounded-xl border border-slate-700/50 bg-slate-800/40 py-6 text-center text-sm text-slate-500 live-card-3d" style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.04)" }}>
-              No past results yet.
-            </p>
-          )}
-        </section>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="w-full rounded-xl border border-slate-700/50 bg-slate-800/40 py-6 text-center text-sm text-slate-500 live-card-3d" style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.04)" }}>
+            No past results yet.
+          </p>
+        )}
+        </div>
+      </section>
 
-        <footer className="mt-10 text-center text-xs text-slate-500">
-          All times in IST
+      <div className="relative z-10 mx-auto max-w-2xl px-3 pb-8 sm:px-4 sm:pb-10 md:max-w-3xl">
+        <footer className="flex flex-wrap items-center justify-center gap-2 text-center text-[10px] text-slate-500 sm:gap-4 sm:text-xs">
+          <span>All times in IST</span>
+          <Link
+            href="/live/log"
+            className="text-amber-400/90 underline hover:text-amber-400"
+          >
+            Spinner detail log (har second report)
+          </Link>
         </footer>
       </div>
     </main>
@@ -313,7 +368,7 @@ function TopSection({
             "0 4px 20px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05), 0 0 30px -5px rgba(59,130,246,0.12)",
         }}
       >
-        <div className="grid w-full grid-cols-2 gap-2 px-3 py-3 sm:grid-cols-4 sm:gap-4 sm:px-6 sm:py-4">
+        <div className="grid w-full grid-cols-2 gap-1.5 px-2 py-2.5 sm:grid-cols-4 sm:gap-4 sm:px-6 sm:py-4 md:gap-5 md:px-8 lg:px-10 lg:py-5">
           <OrangeBarItem
             label="Next Draw Time"
             value={nextSlot ? formatNextSlotTime(nextSlot.nextSlotTime) : "—"}
@@ -327,41 +382,42 @@ function TopSection({
         </div>
       </section>
 
-      {/* Spinner section – same dark theme */}
-      <section className="relative z-10 flex flex-col py-4">
-        <div className="flex h-[400px] items-center justify-center gap-2 px-2 sm:gap-4 sm:px-4">
+      {/* Spinner section – less top padding on wide so spinner isn’t cut at bottom */}
+      <section className="relative z-10 flex flex-col pt-2 pb-2 sm:pt-3 sm:pb-4 md:pt-4 md:pb-6 lg:pt-2 lg:pb-6 xl:pt-3 xl:pb-8">
+        <div className="flex h-[260px] min-h-[220px] items-center justify-center gap-2 px-1 py-2 sm:h-[320px] sm:gap-4 sm:px-4 md:h-[360px] md:gap-6 lg:h-[440px] lg:items-start lg:justify-center lg:gap-12 lg:pt-0 xl:h-[520px] xl:gap-16 xl:min-h-[480px]">
           <LuckyDrawSpinner
             result={spinnerDisplayResult}
             countdownDisplay={showNextGameMessage ? null : countdownDisplay}
+            countdownSeconds={countdownSeconds}
           />
         </div>
       </section>
 
       {/* Digital countdown OR "Next game" message for 10s after draw */}
-      <section className="relative z-10 mx-auto max-w-2xl px-4">
+      <section className="relative z-10 mx-auto max-w-2xl px-3 sm:px-4 md:px-6 lg:max-w-3xl">
         {showNextGameMessage ? (
           <NextGameMessage />
         ) : (
           <>
-            <p className="text-center text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+            <p className="text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400 sm:text-xs">
               Next draw in
             </p>
-            <div className="mt-2 flex justify-center gap-1 sm:gap-2">
+            <div className="mt-1.5 flex justify-center gap-1 sm:mt-2 sm:gap-2">
               {countdownParts ? (
                 <>
                   <DigitalBox value={countdownParts.h} label="Hrs" urgent={isUrgent} />
-                  <span className="flex items-end pb-2 font-mono text-2xl font-bold text-slate-500">
+                  <span className="flex items-end pb-1 font-mono text-lg font-bold text-slate-500 sm:pb-2 sm:text-2xl">
                     :
                   </span>
                   <DigitalBox value={countdownParts.m} label="Min" urgent={isUrgent} />
-                  <span className="flex items-end pb-2 font-mono text-2xl font-bold text-slate-500">
+                  <span className="flex items-end pb-1 font-mono text-lg font-bold text-slate-500 sm:pb-2 sm:text-2xl">
                     :
                   </span>
                   <DigitalBox value={countdownParts.s} label="Sec" urgent={isUrgent} />
                 </>
               ) : (
                 <div
-                  className="rounded-lg border-2 border-slate-600/50 bg-slate-800/60 px-6 py-3 font-mono text-2xl text-slate-400 live-card-3d"
+                  className="rounded-lg border-2 border-slate-600/50 bg-slate-800/60 px-4 py-2 font-mono text-lg text-slate-400 live-card-3d sm:px-6 sm:py-3 sm:text-2xl"
                   style={{
                     boxShadow:
                       "0 4px 14px rgba(0,0,0,0.35), 0 0 20px -5px rgba(59,130,246,0.1)",
@@ -372,7 +428,7 @@ function TopSection({
               )}
             </div>
             {nextSlot && (
-              <p className="mt-2 text-center text-sm text-slate-400">
+              <p className="mt-1.5 text-center text-xs text-slate-400 sm:mt-2 sm:text-sm">
                 Draw at{" "}
                 <span className="font-semibold text-slate-300">
                   {formatNextSlotTime(nextSlot.nextSlotTime)}
@@ -390,10 +446,10 @@ function TopSection({
 function NextGameMessage() {
   return (
     <div className="next-game-message-wrap">
-      <p className="text-center text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+      <p className="text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 sm:text-xs">
         Next draw starting soon
       </p>
-      <div className="next-game-message mt-3 rounded-xl border-2 border-amber-400/70 bg-slate-900/80 px-8 py-5 text-center font-bold uppercase tracking-wider sm:px-10 sm:py-6 sm:text-xl">
+      <div className="next-game-message mt-2 rounded-xl border-2 border-amber-400/70 bg-slate-900/80 px-4 py-3 text-center text-sm font-bold uppercase tracking-wider sm:mt-3 sm:px-10 sm:py-6 sm:text-xl">
         Next game
       </div>
     </div>
@@ -411,7 +467,7 @@ function DigitalBox({
 }) {
   return (
     <div
-      className={`rounded-lg border-2 px-3 py-2 text-center font-mono text-2xl font-bold tabular-nums sm:px-4 sm:text-3xl live-card-3d live-card-glow transition-shadow ${
+      className={`rounded-lg border-2 px-2 py-1.5 text-center font-mono text-lg font-bold tabular-nums live-card-3d live-card-glow transition-shadow sm:px-3 sm:py-2 sm:text-2xl md:px-4 md:text-3xl ${
         urgent
           ? "border-red-500/70 bg-red-950/50 text-red-400 animate-[screenFlicker_3s_ease-in-out_infinite]"
           : "border-slate-500/50 bg-slate-800/80 text-slate-200"
@@ -419,7 +475,7 @@ function DigitalBox({
       style={urgent ? undefined : { boxShadow: "0 4px 14px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06), 0 0 20px -5px rgba(59,130,246,0.12)" }}
     >
       <span className="block">{value}</span>
-      <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-wider text-slate-500">
+      <span className="mt-0.5 block text-[8px] font-medium uppercase tracking-wider text-slate-500 sm:text-[10px]">
         {label}
       </span>
     </div>
@@ -436,18 +492,18 @@ function TimeToDrawCell({
 }) {
   return (
     <div
-      className="rounded-lg border border-slate-600/50 bg-slate-800/80 px-2 py-2 text-center sm:px-3 sm:py-2.5 live-card-3d"
+      className="rounded-lg border border-slate-600/50 bg-slate-800/80 px-1.5 py-1.5 text-center sm:px-3 sm:py-2.5 md:px-4 md:py-2.5 live-card-3d"
       style={{ boxShadow: "0 2px 10px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.04)" }}
     >
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 sm:text-xs">
+      <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 sm:text-[10px] md:text-xs">
         Time to Draw
       </p>
       {showNextGameMessage ? (
-        <p className="next-game-message mt-0.5 text-sm font-bold uppercase tracking-wider text-amber-400 sm:text-base">
+        <p className="next-game-message mt-0.5 text-xs font-bold uppercase tracking-wider text-amber-400 sm:text-sm md:text-base">
           Next game
         </p>
       ) : (
-        <p className="mt-0.5 font-mono text-sm font-bold tabular-nums text-white sm:text-base">
+        <p className="mt-0.5 font-mono text-xs font-bold tabular-nums text-white sm:text-sm md:text-base">
           {countdownDisplay ?? "—"}
         </p>
       )}
@@ -457,11 +513,11 @@ function TimeToDrawCell({
 
 function OrangeBarItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-600/50 bg-slate-800/80 px-2 py-2 text-center sm:px-3 sm:py-2.5 live-card-3d" style={{ boxShadow: "0 2px 10px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.04)" }}>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 sm:text-xs">
+    <div className="rounded-lg border border-slate-600/50 bg-slate-800/80 px-1.5 py-1.5 text-center sm:px-3 sm:py-2.5 md:px-4 md:py-2.5 live-card-3d" style={{ boxShadow: "0 2px 10px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.04)" }}>
+      <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400 sm:text-[10px] md:text-xs">
         {label}
       </p>
-      <p className="mt-0.5 font-mono text-sm font-bold tabular-nums text-white sm:text-base">
+      <p className="mt-0.5 font-mono text-xs font-bold tabular-nums text-white sm:text-sm md:text-base">
         {value}
       </p>
     </div>
@@ -509,43 +565,50 @@ const WHEEL_SEGMENTS: { color: string; number: number }[] = [
   { color: "#d97706", number: 9 },  /* 10 – amber */
 ];
 
-/** Single digit wheel: static segments 0-9, golden rim, red pointer, center digit (no spin logic) */
+/** Single digit wheel: segments 0-9, golden rim, red pointer (fixed), center digit. rotation applied to wheel only. */
 type SingleDigitWheelProps = {
   digit: string;
+  rotation: number;
 };
 
-function SingleDigitWheel({ digit }: SingleDigitWheelProps) {
-  const size = "400px";
-  const centerSize = "min(24vmin, 62px)";
-
+function SingleDigitWheel({ digit, rotation }: SingleDigitWheelProps) {
   return (
-    <div className="relative flex flex-col items-center" style={{ width: size, height: size }}>
+    <div className="relative flex w-[120px] min-w-[100px] flex-col items-center aspect-square sm:w-[150px] sm:min-w-[140px] md:w-[220px] md:min-w-[200px] lg:w-[320px] lg:min-w-[300px] xl:w-[400px] xl:min-w-[380px]">
+      {/* Pointer at top – white arrow, upper edge curved to match wheel circle; subtle shadow */}
       <div className="absolute left-1/2 top-0 z-10 -translate-x-1/2">
-        <div
-          className="h-0 w-0 border-l-[20px] border-r-[20px] border-b-[28px] border-l-transparent border-r-transparent border-b-red-500"
-          style={{ filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.4))" }}
-        />
+        <svg
+          className="h-[14px] w-[20px] sm:h-[20px] sm:w-[28px] md:h-[22px] md:w-[32px] lg:h-[32px] lg:w-[48px] xl:h-[38px] xl:w-[56px]"
+          viewBox="0 0 20 14"
+          fill="none"
+          style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.35))" }}
+        >
+          {/* Top edge = arc matching circle; tip at bottom center */}
+          <path
+            d="M 0 0 Q 10 -4 20 0 L 10 14 Z"
+            fill="white"
+          />
+        </svg>
       </div>
-      <div className="relative flex flex-1 items-center justify-center" style={{ width: size, height: size }}>
+      <div className="relative flex w-full flex-1 items-center justify-center [aspect-ratio:1/1]">
         <div
-          className="relative overflow-hidden rounded-full shadow-lg"
+          className="relative h-full w-full max-h-full max-w-full overflow-hidden rounded-full shadow-lg"
           style={{
-            width: size,
-            height: size,
             border: "3px solid #fbbf24",
             boxShadow:
               "0 0 0 1px rgba(251,191,36,0.5), 0 8px 24px rgba(0,0,0,0.4), 0 0 40px -5px rgba(251,191,36,0.25), 0 0 60px -10px rgba(59,130,246,0.15)",
           }}
         >
-          <div className="absolute inset-[2px] rounded-full">
-            {/* Segment colours – bright, clearly visible */}
+          {/* Rotating wheel (segments + labels) – pointer stays fixed */}
+          <div
+            className="absolute inset-[2px] rounded-full"
+            style={{ transform: `rotate(${rotation}deg)` }}
+          >
             <div
               className="absolute inset-0 rounded-full"
               style={{
                 background: `conic-gradient(from 0deg, ${WHEEL_SEGMENTS.map((seg, i) => `${seg.color} ${i * 36}deg ${(i + 1) * 36}deg`).join(", ")})`,
               }}
             />
-            {/* Har segment pe number – chhota circle usi colour ka, andar number */}
             {WHEEL_SEGMENTS.map((seg, i) => {
               const angleDeg = i * 36 + 18;
               return (
@@ -557,12 +620,11 @@ function SingleDigitWheel({ digit }: SingleDigitWheelProps) {
                   }}
                 >
                   <span
-                    className="flex h-9 w-9 items-center justify-center rounded-full font-mono font-black tabular-nums sm:h-10 sm:w-10"
+                    className="flex h-6 w-6 items-center justify-center rounded-full font-mono text-sm font-black tabular-nums sm:h-7 sm:w-7 sm:text-base md:h-8 md:w-8 md:text-lg lg:h-11 lg:w-11 lg:text-xl xl:h-12 xl:w-12 xl:text-2xl"
                     style={{
                       transform: `rotate(${-angleDeg}deg)`,
                       backgroundColor: seg.color,
                       color: "#ffffff",
-                      fontSize: "22px",
                       textShadow: "0 1px 2px rgba(0,0,0,0.5)",
                       boxShadow: "inset 0 2px 6px rgba(255,255,255,0.35), inset 0 -2px 6px rgba(0,0,0,0.25), 0 4px 8px rgba(0,0,0,0.4)",
                       border: "1px solid rgba(255,255,255,0.2)",
@@ -574,16 +636,15 @@ function SingleDigitWheel({ digit }: SingleDigitWheelProps) {
               );
             })}
           </div>
+          {/* Center digit – fixed, does NOT rotate; bigger on wide screens */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div
-              className="flex items-center justify-center rounded-full bg-white"
+              className="flex h-[min(20vmin,48px)] w-[min(20vmin,48px)] items-center justify-center rounded-full bg-white lg:h-14 lg:w-14 xl:h-16 xl:w-16"
               style={{
-                width: centerSize,
-                height: centerSize,
                 boxShadow: "0 2px 6px rgba(0,0,0,0.25), 0 0 0 2px rgba(255,255,255,0.9)",
               }}
             >
-              <span className="font-mono text-3xl font-black tabular-nums text-black sm:text-4xl">
+              <span className="font-mono text-xl font-black tabular-nums text-black sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl">
                 {digit}
               </span>
             </div>
@@ -598,13 +659,17 @@ function SingleDigitWheel({ digit }: SingleDigitWheelProps) {
 type LuckyDrawSpinnerProps = {
   result: PublicCurrentResult | null | undefined;
   countdownDisplay: string | null;
+  countdownSeconds: number | null;
 };
 
 function LuckyDrawSpinner({
   result,
   countdownDisplay,
+  countdownSeconds,
 }: LuckyDrawSpinnerProps) {
   const resultStyle = useResultNumberColor();
+  const { rotation1, rotation2, spinToResult, reset } = useSpinEngine();
+  const prevResultRef = useRef<string | null>(null);
 
   const resultNumber = result?.resultNumber ?? "";
   const digit1 = resultNumber.length >= 1 ? resultNumber[0] : "—";
@@ -616,38 +681,55 @@ function LuckyDrawSpinner({
 
   const middleBoxResult = resultNumber || "—";
 
+  useEffect(() => {
+    if (!resultNumber) return;
+
+    if (prevResultRef.current === resultNumber) {
+      return; // prevent duplicate spin
+    }
+
+    prevResultRef.current = resultNumber;
+    spinToResult(resultNumber);
+  }, [resultNumber]);
+
+  useEffect(() => {
+    if (countdownSeconds !== null && countdownSeconds === 5) {
+      reset();
+    }
+  }, [countdownSeconds, reset]);
+
   return (
-    <div className="relative flex flex-wrap items-center justify-center gap-12 sm:gap-20">
-      <SingleDigitWheel digit={digit1} />
-      {/* Middle: 3D + glow */}
-      <div className="flex flex-col items-center gap-2 sm:gap-2.5">
+    <div className="relative flex flex-wrap items-center justify-center gap-3 sm:gap-8 md:gap-12 lg:gap-14 xl:gap-20">
+      <SingleDigitWheel digit={digit1} rotation={rotation1} />
+      {/* Middle: 3D + glow – responsive padding & font size */}
+      <div className="flex flex-col items-center gap-1.5 sm:gap-2.5">
         <div
-          className="rounded-lg bg-amber-400/95 px-4 py-2 live-card-3d"
+          className="rounded-lg bg-amber-400/95 px-2.5 py-1.5 live-card-3d sm:px-4 sm:py-2"
           style={{ border: "1px solid rgba(0,0,0,0.08)", boxShadow: "0 4px 12px rgba(0,0,0,0.3), 0 0 20px -2px rgba(251,191,36,0.3)" }}
         >
-          <span className="text-sm font-semibold text-black sm:text-base">{gameName}</span>
+          <span className="text-xs font-semibold text-black sm:text-sm md:text-base">{gameName}</span>
         </div>
         <div
-          className="flex items-center justify-center rounded-xl bg-slate-900/95 px-6 py-4 live-card-3d"
-          style={{ minWidth: "88px", boxShadow: "0 6px 20px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.1), 0 0 25px -2px rgba(59,130,246,0.2)" }}
+          className="flex min-w-[64px] items-center justify-center rounded-xl bg-slate-900/95 px-3 py-2.5 live-card-3d sm:min-w-[88px] sm:px-6 sm:py-4 lg:min-w-[100px] lg:px-8 lg:py-5 xl:min-w-[120px] xl:px-10 xl:py-6"
+          style={{ boxShadow: "0 6px 20px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.1), 0 0 25px -2px rgba(59,130,246,0.2)" }}
         >
           <span
-            className="font-mono text-4xl font-black tabular-nums leading-none transition-colors duration-300 sm:text-5xl"
+            className="font-mono text-2xl font-black tabular-nums leading-none transition-colors duration-300 sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl"
             style={{ color: resultStyle.color, textShadow: resultStyle.shadow }}
           >
             {middleBoxResult || "—"}
           </span>
         </div>
         <div
-          className="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg bg-orange-500 px-2 py-1.5 live-card-3d"
+          className="flex min-h-[28px] min-w-[28px] items-center justify-center rounded-lg bg-orange-500 px-1.5 py-1 live-card-3d sm:min-h-[36px] sm:min-w-[36px] sm:px-2 sm:py-1.5"
           style={{ boxShadow: "0 4px 12px rgba(0,0,0,0.3), 0 0 15px -2px rgba(249,115,22,0.4)" }}
         >
-          <span className="font-mono text-xs font-bold tabular-nums text-white sm:text-sm">
+          <span className="font-mono text-[10px] font-bold tabular-nums text-white sm:text-xs md:text-sm">
             {countdownDisplay ?? "—"}
           </span>
         </div>
       </div>
-      <SingleDigitWheel digit={digit2} />
+      <SingleDigitWheel digit={digit2} rotation={rotation2} />
     </div>
   );
 }
@@ -742,11 +824,11 @@ function WinningNumberCard({
 
   if (result == null) {
     return (
-      <div className="rounded-2xl border-2 border-slate-600/50 bg-slate-800/60 py-10 text-center backdrop-blur-sm live-card-3d live-card-glow transition-shadow" style={{ boxShadow: "0 6px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06), 0 0 25px -5px rgba(59,130,246,0.1)" }}>
-        <p className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+      <div className="rounded-2xl border-2 border-slate-600/50 bg-slate-800/60 py-6 text-center backdrop-blur-sm live-card-3d live-card-glow transition-shadow sm:py-10" style={{ boxShadow: "0 6px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06), 0 0 25px -5px rgba(59,130,246,0.1)" }}>
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 sm:text-sm">
           No result yet
         </p>
-        <p className="mt-1 text-xs text-slate-500">Winning number will appear here after draw</p>
+        <p className="mt-1 text-[10px] text-slate-500 sm:text-xs">Winning number will appear here after draw</p>
       </div>
     );
   }
@@ -758,25 +840,25 @@ function WinningNumberCard({
 
   return (
     <div
-      className={`rounded-2xl border-2 py-8 text-center backdrop-blur-sm live-card-3d live-card-glow transition-shadow ${
+      className={`rounded-2xl border-2 py-6 text-center backdrop-blur-sm live-card-3d live-card-glow transition-shadow sm:py-8 ${
         justDeclared
           ? "border-amber-400/60 bg-amber-950/30 animate-[justDeclared_2s_ease-out_forwards]"
           : "border-slate-600/50 bg-slate-800/60"
       }`}
       style={justDeclared ? undefined : { boxShadow: "0 6px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06), 0 0 25px -5px rgba(59,130,246,0.12)" }}
     >
-      <p className="text-xs font-bold uppercase tracking-[0.25em] text-amber-400/90">
+      <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-amber-400/90 sm:text-xs">
         {justDeclared ? "🎉 Winning number 🎉" : "Latest result"}
       </p>
       <p
-        className={`mt-4 font-mono text-6xl font-black tabular-nums sm:text-7xl transition-colors duration-300 ${
+        className={`mt-3 font-mono text-5xl font-black tabular-nums transition-colors duration-300 sm:mt-4 sm:text-6xl md:text-7xl ${
           justDeclared ? "animate-[flipIn_0.5s_ease-out_forwards]" : ""
         }`}
         style={{ color: resultStyle.color, textShadow: resultStyle.shadow }}
       >
         {result.resultNumber}
       </p>
-      <p className="mt-2 text-sm text-slate-400">
+      <p className="mt-2 text-[10px] text-slate-400 sm:text-sm">
         {gameName} · {formatResultDateTime(result.fullDateTime)}
       </p>
     </div>

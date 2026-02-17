@@ -379,15 +379,19 @@ export async function getPublicNextSlot(): Promise<PublicNextSlot | null> {
   return data as PublicNextSlot;
 }
 
-/** Past results with pagination. No auth. */
+/** Past results with pagination and optional date range (YYYY-MM-DD, IST day). No auth. */
 export async function getPublicPastResults(params?: {
   page?: number;
   limit?: number;
+  fromDate?: string;
+  toDate?: string;
 }): Promise<PublicPastResultsResponse> {
   const baseUrl = getBaseUrl();
   const search = new URLSearchParams();
   if (params?.page != null) search.set("page", String(params.page));
   if (params?.limit != null) search.set("limit", String(params.limit));
+  if (params?.fromDate) search.set("fromDate", params.fromDate);
+  if (params?.toDate) search.set("toDate", params.toDate);
   const qs = search.toString();
   const res = await fetch(`${baseUrl}/api/past-results${qs ? `?${qs}` : ""}`);
   const data = await res.json().catch(() => ({}));

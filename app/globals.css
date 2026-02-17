@@ -172,3 +172,67 @@ span.result-number-animate {
     0 0 30px -5px rgba(59, 130, 246, 0.2),
     0 0 40px -10px rgba(139, 92, 246, 0.15);
 }
+
+/* Live page date inputs – same look as live cards (slate + amber), dark calendar */
+.live-date-filters {
+  color-scheme: dark;
+}
+.live-date-input {
+  color-scheme: dark;
+  background-color: rgb(30 41 59 / 0.95) !important;
+  color: #f1f5f9 !important;
+  border: 1px solid rgb(71 85 105 / 0.6);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  min-height: 2.5rem;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.4),
+    0 10px 20px -5px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 0 20px -5px rgba(59, 130, 246, 0.12);
+}
+.live-date-input:hover {
+  border-color: rgb(100 116 139 / 0.7);
+  background-color: rgb(51 65 85 / 0.95) !important;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.4),
+    0 10px 20px -5px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 0 24px -5px rgba(59, 130, 246, 0.18);
+}
+.live-date-input:focus {
+  outline: none;
+  border-color: rgba(251, 191, 36, 0.6);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 0 0 3px rgba(251, 191, 36, 0.2),
+    0 0 20px -5px rgba(251, 191, 36, 0.15);
+}
+/* WebKit: date text inside input – slate/amber theme */
+.live-date-input::-webkit-datetime-edit {
+  color: #e2e8f0;
+}
+.live-date-input::-webkit-datetime-edit-fields-wrapper {
+  color: #e2e8f0;
+}
+.live-date-input::-webkit-datetime-edit-text {
+  color: #94a3b8;
+}
+.live-date-input::-webkit-datetime-edit-month-field,
+.live-date-input::-webkit-datetime-edit-day-field,
+.live-date-input::-webkit-datetime-edit-year-field {
+  color: #f1f5f9;
+}
+/* Calendar icon – light so visible on dark input; no invert when color-scheme is dark */
+.live-date-input::-webkit-calendar-picker-indicator {
+  opacity: 0.85;
+  cursor: pointer;
+  filter: brightness(0) invert(1);
+}
+/* Firefox date input dark theme */
+.live-date-input::-moz-focus-inner {
+  border: 0;
+}
