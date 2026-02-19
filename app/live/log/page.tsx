@@ -100,6 +100,14 @@ function buildLogRow(
   const resultNumber = result?.resultNumber ?? "—";
   const digit1 = resultNumber.length >= 1 ? resultNumber[0] : "—";
   const digit2 = resultNumber.length >= 2 ? resultNumber[1] : "—";
+  // Safely derive game name from either result.gameName (string) or result.gameId.name (object shape)
+  let gameName: string | null = null;
+  if (typeof result?.gameName === "string") {
+    gameName = result.gameName;
+  } else if (result?.gameId && typeof result.gameId === "object" && "name" in result.gameId) {
+    const maybeName = (result.gameId as { name?: string }).name;
+    gameName = typeof maybeName === "string" ? maybeName : null;
+  }
   return {
     id: `${nowMs}-${index}`,
     timestamp: nowMs,
@@ -110,7 +118,7 @@ function buildLogRow(
     digit2,
     wheel1: buildWheelLog(digit1),
     wheel2: buildWheelLog(digit2),
-    gameName: result?.gameName ?? result?.gameId?.name ?? null,
+    gameName,
   };
 }
 
