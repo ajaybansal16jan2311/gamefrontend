@@ -4,11 +4,13 @@ const getBaseUrl = () =>
     : process.env.NEXT_PUBLIC_API_URL || "";
 
 /**
- * Read CSRF token from cookie (set by backend on admin login).
- * Required for POST/PUT/PATCH/DELETE to admin API.
+ * Read CSRF token. For cross-origin (frontend ≠ backend), backend returns it in
+ * login response and we store in sessionStorage. For same-origin, we read from cookie.
  */
 export function getCsrfToken(): string | null {
-  if (typeof document === "undefined") return null;
+  if (typeof window === "undefined") return null;
+  const fromStorage = sessionStorage.getItem("csrf_token");
+  if (fromStorage && fromStorage.trim()) return fromStorage.trim();
   const match = document.cookie.match(/csrf_token=([^;]+)/);
   return match ? decodeURIComponent(match[1].trim()) : null;
 }

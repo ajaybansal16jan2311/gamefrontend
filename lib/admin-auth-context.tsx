@@ -26,6 +26,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => {
     clearAdminToken();
+    if (typeof sessionStorage !== "undefined") sessionStorage.removeItem("csrf_token");
     setIsAuthenticated(false);
   }, []);
 

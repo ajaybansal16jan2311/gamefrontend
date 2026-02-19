@@ -68,6 +68,11 @@ export default function AdminLoginPage() {
         return;
       }
 
+      const csrfToken = typeof data?.csrfToken === "string" ? data.csrfToken : null;
+      if (csrfToken && typeof sessionStorage !== "undefined") {
+        sessionStorage.setItem("csrf_token", csrfToken);
+      }
+
       setAuthenticated();
       router.push("/admin/dashboard");
     } catch {
