@@ -1,9 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-
-const getBaseUrl = () =>
-  typeof window !== "undefined" ? process.env.NEXT_PUBLIC_API_URL || "" : "";
+import { getBaseUrl } from "@/lib/api";
 
 type CalendarEvent = { gameId: string; gameName: string; date: string; time: string };
 

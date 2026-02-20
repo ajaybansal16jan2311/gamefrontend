@@ -2,10 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { getCsrfToken } from "@/lib/api";
-
-const getBaseUrl = () =>
-  typeof window !== "undefined" ? process.env.NEXT_PUBLIC_API_URL || "" : "";
+import { getBaseUrl, getCsrfToken } from "@/lib/api";
 
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 const INTERVAL_PRESETS = [15, 30, 45, 60];

@@ -1,6 +1,10 @@
-const getBaseUrl = () =>
+/**
+ * API base URL. In the browser we use "" so requests go to same origin and Next.js
+ * rewrites /api/* to the backend (no CORS). On the server we use NEXT_PUBLIC_API_URL.
+ */
+export const getBaseUrl = (): string =>
   typeof window !== "undefined"
-    ? process.env.NEXT_PUBLIC_API_URL || ""
+    ? ""
     : process.env.NEXT_PUBLIC_API_URL || "";
 
 /**

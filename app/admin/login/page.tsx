@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminAuth } from "@/lib/admin-auth-context";
+import { getBaseUrl } from "@/lib/api";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -16,11 +17,6 @@ function validatePassword(value: string): string | null {
   if (!value) return "Password is required";
   return null;
 }
-
-const getBaseUrl = () =>
-  typeof window !== "undefined"
-    ? process.env.NEXT_PUBLIC_API_URL || ""
-    : process.env.NEXT_PUBLIC_API_URL || "";
 
 export default function AdminLoginPage() {
   const router = useRouter();
