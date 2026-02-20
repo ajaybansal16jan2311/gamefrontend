@@ -1,78 +1,37 @@
-/**
- * API base URL. In the browser we use "" so requests go to same origin and Next.js
- * rewrites /api/* to the backend (no CORS). On the server we use NEXT_PUBLIC_API_URL.
- */
-export const getBaseUrl = (): string =>
-  typeof window !== "undefined"
-    ? ""
-    : process.env.NEXT_PUBLIC_API_URL || "";
+import { apiClient, getBaseUrl, getCsrfToken } from "./apiClient";
 
-/**
- * Read CSRF token. For cross-origin (frontend ≠ backend), backend returns it in
- * login response and we store in sessionStorage. For same-origin, we read from cookie.
- */
-export function getCsrfToken(): string | null {
-  if (typeof window === "undefined") return null;
-  const fromStorage = sessionStorage.getItem("csrf_token");
-  if (fromStorage && fromStorage.trim()) return fromStorage.trim();
-  const match = document.cookie.match(/csrf_token=([^;]+)/);
-  return match ? decodeURIComponent(match[1].trim()) : null;
-}
+export { getBaseUrl, getCsrfToken };
 
 export async function login(email: string, password: string): Promise<string> {
-  const res = await fetch(`${getBaseUrl()}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-
-  const data = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    const message =
-      typeof data?.message === "string" ? data.message : "Login failed";
-    throw new Error(message);
-  }
+  const { data } = await apiClient.post<{
+    token?: string;
+    accessToken?: string;
+    access_token?: string;
+    message?: string;
+  }>("/api/auth/login", { email, password });
 
   const token = data?.token ?? data?.accessToken ?? data?.access_token;
   if (!token || typeof token !== "string") {
     throw new Error("Invalid response: no token received");
   }
-
   return token;
 }
 
 /**
- * Verify admin session using HTTP-only cookie (credentials: 'include').
- * Used for route protection when using cookie-based auth.
- */
-/**
  * Admin logout: clears cookies on backend. Call before clearing local state.
  */
 export async function adminLogout(): Promise<void> {
-  const baseUrl = getBaseUrl();
-  const csrf = getCsrfToken();
-  const headers: Record<string, string> = {};
-  if (csrf) headers["x-csrf-token"] = csrf;
   try {
-    await fetch(`${baseUrl}/api/admin/logout`, {
-      method: "POST",
-      credentials: "include",
-      headers,
-    });
+    await apiClient.post("/api/admin/logout");
   } catch {
     // Ignore network errors; we still clear local state
   }
 }
 
 export async function checkAdminSessionCookie(): Promise<boolean> {
-  const baseUrl = getBaseUrl();
   try {
-    const res = await fetch(`${baseUrl}/api/admin/me`, {
-      method: "GET",
-      credentials: "include",
-    });
-    return res.ok;
+    const res = await apiClient.get("/api/admin/me");
+    return res.status === 200;
   } catch {
     return false;
   }
@@ -80,17 +39,14 @@ export async function checkAdminSessionCookie(): Promise<boolean> {
 
 /**
  * Verify admin token by calling a protected endpoint.
- * Used for route protection to ensure token is still valid.
  */
 export async function verifyAdminSession(token: string): Promise<boolean> {
-  const baseUrl = getBaseUrl();
-  if (!baseUrl) return true; // no API URL: trust token presence
+  if (!getBaseUrl()) return true; // no API URL: trust token presence
   try {
-    const res = await fetch(`${baseUrl}/api/admin/me`, {
-      method: "GET",
+    const res = await apiClient.get("/api/admin/me", {
       headers: { Authorization: `Bearer ${token}` },
     });
-    return res.ok;
+    return res.status === 200;
   } catch {
     return false;
   }
@@ -114,21 +70,11 @@ export type DailyPlannerResponse = {
   items: DailyPlannerItem[];
 };
 
-/**
- * Fetch daily planner (Result Manager) for a date. Uses admin cookie auth.
- */
 export async function getDailyPlanner(date: string): Promise<DailyPlannerResponse> {
-  const baseUrl = getBaseUrl();
-  const res = await fetch(
-    `${baseUrl}/api/admin/daily-planner?date=${encodeURIComponent(date)}`,
-    { credentials: "include" }
+  const { data } = await apiClient.get<DailyPlannerResponse>(
+    `/api/admin/daily-planner?date=${encodeURIComponent(date)}`
   );
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = typeof data?.message === "string" ? data.message : "Failed to load results";
-    throw new Error(msg);
-  }
-  return data as DailyPlannerResponse;
+  return data;
 }
 
 export type SubmitResultPayload = {
@@ -138,25 +84,8 @@ export type SubmitResultPayload = {
   resultNumber: string;
 };
 
-/**
- * Add or update a scheduled result. Uses admin cookie + CSRF.
- */
 export async function submitResult(payload: SubmitResultPayload): Promise<void> {
-  const baseUrl = getBaseUrl();
-  const csrf = getCsrfToken();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (csrf) headers["x-csrf-token"] = csrf;
-  const res = await fetch(`${baseUrl}/api/admin/result`, {
-    method: "POST",
-    credentials: "include",
-    headers,
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = typeof data?.message === "string" ? data.message : "Failed to save result";
-    throw new Error(msg);
-  }
+  await apiClient.post("/api/admin/result", payload);
 }
 
 // --- Game Manager (unpublished scheduled results) ---
@@ -185,38 +114,19 @@ export type UnpublishedParams = {
 export async function getUnpublishedScheduledResults(
   params?: UnpublishedParams
 ): Promise<UnpublishedResponse> {
-  const baseUrl = getBaseUrl();
   const search = new URLSearchParams();
   if (params?.start) search.set("start", params.start);
   if (params?.end) search.set("end", params.end);
   if (params?.gameId) search.set("gameId", params.gameId);
   if (params?.futureOnly === true) search.set("futureOnly", "true");
   const qs = search.toString();
-  const url = `${baseUrl}/api/admin/scheduled-results/unpublished${qs ? `?${qs}` : ""}`;
-  const res = await fetch(url, { credentials: "include" });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = typeof data?.message === "string" ? data.message : "Failed to load unpublished results";
-    throw new Error(msg);
-  }
-  return data as UnpublishedResponse;
+  const url = `/api/admin/scheduled-results/unpublished${qs ? `?${qs}` : ""}`;
+  const { data } = await apiClient.get<UnpublishedResponse>(url);
+  return data;
 }
 
 export async function deleteScheduledResult(id: string): Promise<void> {
-  const baseUrl = getBaseUrl();
-  const csrf = getCsrfToken();
-  const headers: Record<string, string> = {};
-  if (csrf) headers["x-csrf-token"] = csrf;
-  const res = await fetch(`${baseUrl}/api/admin/scheduled-results/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-    credentials: "include",
-    headers,
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = typeof data?.message === "string" ? data.message : "Failed to delete";
-    throw new Error(msg);
-  }
+  await apiClient.delete(`/api/admin/scheduled-results/${encodeURIComponent(id)}`);
 }
 
 export type CancelSlotPayload = {
@@ -225,25 +135,8 @@ export type CancelSlotPayload = {
   time: string;
 };
 
-/**
- * Cancel a single future slot (pending or scheduled). Uses admin cookie + CSRF.
- */
 export async function cancelSlot(payload: CancelSlotPayload): Promise<void> {
-  const baseUrl = getBaseUrl();
-  const csrf = getCsrfToken();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (csrf) headers["x-csrf-token"] = csrf;
-  const res = await fetch(`${baseUrl}/api/admin/slots/cancel`, {
-    method: "POST",
-    credentials: "include",
-    headers,
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = typeof data?.message === "string" ? data.message : "Failed to cancel slot";
-    throw new Error(msg);
-  }
+  await apiClient.post("/api/admin/slots/cancel", payload);
 }
 
 export type DeleteScheduledResultsByGameResponse = {
@@ -252,92 +145,43 @@ export type DeleteScheduledResultsByGameResponse = {
   cancelledPendingCount: number;
 };
 
-/**
- * Delete all future unpublished scheduled results for a game (and cancel pending slots). Uses admin cookie + CSRF.
- */
 export async function deleteScheduledResultsByGame(
   gameId: string
 ): Promise<DeleteScheduledResultsByGameResponse> {
-  const baseUrl = getBaseUrl();
-  const csrf = getCsrfToken();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (csrf) headers["x-csrf-token"] = csrf;
-  const res = await fetch(`${baseUrl}/api/admin/scheduled-results/bulk-by-game`, {
-    method: "DELETE",
-    credentials: "include",
-    headers,
-    body: JSON.stringify({ gameId }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = typeof data?.message === "string" ? data.message : "Failed to delete by game";
-    throw new Error(msg);
-  }
-  return data as DeleteScheduledResultsByGameResponse;
+  const { data } = await apiClient.delete<DeleteScheduledResultsByGameResponse>(
+    "/api/admin/scheduled-results/bulk-by-game",
+    { data: { gameId } }
+  );
+  return data;
 }
 
-export async function deleteScheduledResultsBulk(ids: string[]): Promise<{ deletedCount: number; skippedCount: number }> {
-  const baseUrl = getBaseUrl();
-  const csrf = getCsrfToken();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (csrf) headers["x-csrf-token"] = csrf;
-  const res = await fetch(`${baseUrl}/api/admin/scheduled-results/bulk`, {
-    method: "DELETE",
-    credentials: "include",
-    headers,
-    body: JSON.stringify({ ids }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = typeof data?.message === "string" ? data.message : "Failed to delete";
-    throw new Error(msg);
-  }
-  return data as { deletedCount: number; skippedCount: number };
+export async function deleteScheduledResultsBulk(
+  ids: string[]
+): Promise<{ deletedCount: number; skippedCount: number }> {
+  const { data } = await apiClient.delete<{ deletedCount: number; skippedCount: number }>(
+    "/api/admin/scheduled-results/bulk",
+    { data: { ids } }
+  );
+  return data;
 }
 
 export async function updateScheduledResultsBulk(
   ids: string[],
   resultNumber: string
 ): Promise<{ updatedCount: number; skippedCount: number }> {
-  const baseUrl = getBaseUrl();
-  const csrf = getCsrfToken();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (csrf) headers["x-csrf-token"] = csrf;
-  const res = await fetch(`${baseUrl}/api/admin/scheduled-results/bulk`, {
-    method: "PATCH",
-    credentials: "include",
-    headers,
-    body: JSON.stringify({ ids, resultNumber }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = typeof data?.message === "string" ? data.message : "Failed to update";
-    throw new Error(msg);
-  }
-  return data as { updatedCount: number; skippedCount: number };
+  const { data } = await apiClient.patch<{ updatedCount: number; skippedCount: number }>(
+    "/api/admin/scheduled-results/bulk",
+    { ids, resultNumber }
+  );
+  return data;
 }
 
-/**
- * Hard reset: delete all game data (games, schedules, results, cancelled slots).
- * Uses admin cookie + CSRF. Call only after frontend double confirmation.
- */
 export async function hardReset(): Promise<{ ok: true; message: string }> {
-  const baseUrl = getBaseUrl();
-  const csrf = getCsrfToken();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (csrf) headers["x-csrf-token"] = csrf;
-  const res = await fetch(`${baseUrl}/api/admin/hard-reset`, {
-    method: "POST",
-    credentials: "include",
-    headers,
-    body: JSON.stringify({}),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = typeof data?.message === "string" ? data.message : "Hard reset failed";
-    throw new Error(msg);
-  }
-  return data as { ok: true; message: string };
+  const { data } = await apiClient.post<{ ok: true; message: string }>(
+    "/api/admin/hard-reset",
+    {}
+  );
+  return data;
 }
 
 // --- Public API (no login, for live/results page) ---
@@ -380,62 +224,43 @@ export type PublicNowResponse = {
 
 /** Latest published result. No auth. */
 export async function getPublicCurrentResult(): Promise<PublicCurrentResult | null> {
-  const baseUrl = getBaseUrl();
-  const res = await fetch(`${baseUrl}/api/current-result`);
-  const data = await res.json().catch(() => ({}));
+  const res = await apiClient.get<PublicCurrentResult>("/api/current-result", {
+    validateStatus: (s) => s === 200 || s === 404,
+  });
   if (res.status === 404) return null;
-  if (!res.ok) {
-    const msg = typeof data?.message === "string" ? data.message : "Failed to load current result";
-    throw new Error(msg);
-  }
-  return data as PublicCurrentResult;
+  return res.data;
 }
 
 /** Next draw slot time and remaining seconds. No auth. */
 export async function getPublicNextSlot(): Promise<PublicNextSlot | null> {
-  const baseUrl = getBaseUrl();
-  const res = await fetch(`${baseUrl}/api/next-slot`);
-  const data = await res.json().catch(() => ({}));
+  const res = await apiClient.get<PublicNextSlot>("/api/next-slot", {
+    validateStatus: (s) => s === 200 || s === 404,
+  });
   if (res.status === 404) return null;
-  if (!res.ok) {
-    const msg = typeof data?.message === "string" ? data.message : "Failed to load next slot";
-    throw new Error(msg);
-  }
-  return data as PublicNextSlot;
+  return res.data;
 }
 
-/** Past results with pagination and optional date range (YYYY-MM-DD, IST day). No auth. */
+/** Past results with pagination and optional date range. No auth. */
 export async function getPublicPastResults(params?: {
   page?: number;
   limit?: number;
   fromDate?: string;
   toDate?: string;
 }): Promise<PublicPastResultsResponse> {
-  const baseUrl = getBaseUrl();
   const search = new URLSearchParams();
   if (params?.page != null) search.set("page", String(params.page));
   if (params?.limit != null) search.set("limit", String(params.limit));
   if (params?.fromDate) search.set("fromDate", params.fromDate);
   if (params?.toDate) search.set("toDate", params.toDate);
   const qs = search.toString();
-  const res = await fetch(`${baseUrl}/api/past-results${qs ? `?${qs}` : ""}`);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = typeof data?.message === "string" ? data.message : "Failed to load past results";
-    throw new Error(msg);
-  }
-  return data as PublicPastResultsResponse;
+  const { data } = await apiClient.get<PublicPastResultsResponse>(
+    `/api/past-results${qs ? `?${qs}` : ""}`
+  );
+  return data;
 }
 
 /** Current server time in IST (for live clock). No auth. */
 export async function getPublicNow(): Promise<PublicNowResponse> {
-  const baseUrl = getBaseUrl();
-  const res = await fetch(`${baseUrl}/api/now`);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg =
-      typeof data?.message === "string" ? data.message : "Failed to load server time";
-    throw new Error(msg);
-  }
-  return data as PublicNowResponse;
+  const { data } = await apiClient.get<PublicNowResponse>("/api/now");
+  return data;
 }

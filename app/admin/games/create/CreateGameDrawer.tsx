@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { getBaseUrl, getCsrfToken } from "@/lib/api";
+import { getCsrfToken } from "@/lib/api";
+import { apiClient } from "@/lib/apiClient";
 
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 const INTERVAL_PRESETS = [15, 30, 45, 60];
@@ -154,8 +155,7 @@ export function CreateGameDrawer({ onClose, onSuccess }: CreateGameDrawerProps) 
 
     setLoading(true);
     try {
-      const base = getBaseUrl();
-      let body: Record<string, unknown> = {
+      const body: Record<string, unknown> = {
         name: name.trim(),
         startDate: new Date(startDate).toISOString().slice(0, 10),
         scheduleType,
@@ -172,28 +172,12 @@ export function CreateGameDrawer({ onClose, onSuccess }: CreateGameDrawerProps) 
         body.slotIntervalMinutes = getEffectiveInterval() ?? 30;
       }
 
-      const res = await fetch(`${base}/api/admin/games`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-csrf-token": csrf,
-        },
-        credentials: "include",
-        body: JSON.stringify(body),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      const message = typeof data?.message === "string" ? data.message : "Failed to create game";
-
-      if (!res.ok) {
-        setError(message);
-        return;
-      }
+      await apiClient.post("/api/admin/games", body);
 
       onSuccess();
       onClose();
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }

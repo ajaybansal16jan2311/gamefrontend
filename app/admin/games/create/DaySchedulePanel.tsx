@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { formatTimeToAMPM } from "@/lib/formatTime";
-import { getBaseUrl } from "@/lib/api";
+import { apiClient } from "@/lib/apiClient";
 
 type CalendarEvent = { gameId: string; gameName: string; date: string; time: string };
 
@@ -16,19 +16,11 @@ export function DaySchedulePanel({ dateStr, onClose }: DaySchedulePanelProps) {
   const [loading, setLoading] = useState(true);
 
   const fetchDay = useCallback(async () => {
-    const base = getBaseUrl();
-    if (!base) {
-      setEvents([]);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     try {
-      const res = await fetch(
-        `${base}/api/admin/calendar-events?start=${dateStr}&end=${dateStr}`,
-        { credentials: "include" }
+      const { data } = await apiClient.get<{ events?: CalendarEvent[] }>(
+        `/api/admin/calendar-events?start=${dateStr}&end=${dateStr}`
       );
-      const data = await res.json().catch(() => ({}));
       const list = Array.isArray(data.events) ? data.events : [];
       list.sort((a: CalendarEvent, b: CalendarEvent) => a.time.localeCompare(b.time));
       setEvents(list);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { getBaseUrl } from "@/lib/api";
+import { apiClient } from "@/lib/apiClient";
 
 type CalendarEvent = { gameId: string; gameName: string; date: string; time: string };
 
@@ -65,19 +65,12 @@ export function Calendar({ onSelectDate, selectedDate }: CalendarProps) {
   const month = viewDate.getMonth();
 
   const fetchEvents = useCallback(async () => {
-    const base = getBaseUrl();
-    if (!base) {
-      setEvents([]);
-      return;
-    }
     const { startStr, endStr } = getMonthStartEnd(year, month);
     setLoading(true);
     try {
-      const res = await fetch(
-        `${base}/api/admin/calendar-events?start=${startStr}&end=${endStr}`,
-        { credentials: "include" }
+      const { data } = await apiClient.get<{ events?: CalendarEvent[] }>(
+        `/api/admin/calendar-events?start=${startStr}&end=${endStr}`
       );
-      const data = await res.json().catch(() => ({}));
       setEvents(Array.isArray(data.events) ? data.events : []);
     } catch {
       setEvents([]);
