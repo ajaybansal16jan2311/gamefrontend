@@ -68,11 +68,22 @@ export type DailyPlannerItem = {
 export type DailyPlannerResponse = {
   date: string;
   items: DailyPlannerItem[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
 };
 
-export async function getDailyPlanner(date: string): Promise<DailyPlannerResponse> {
+export async function getDailyPlanner(
+  date: string,
+  params?: { page?: number; limit?: number }
+): Promise<DailyPlannerResponse> {
+  const search = new URLSearchParams();
+  search.set("date", date);
+  if (params?.page != null) search.set("page", String(params.page));
+  if (params?.limit != null) search.set("limit", String(params.limit));
   const { data } = await apiClient.get<DailyPlannerResponse>(
-    `/api/admin/daily-planner?date=${encodeURIComponent(date)}`
+    `/api/admin/daily-planner?${search.toString()}`
   );
   return data;
 }
@@ -102,6 +113,11 @@ export type UnpublishedItem = {
 
 export type UnpublishedResponse = {
   items: UnpublishedItem[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
+  games?: { gameId: string; gameName: string }[];
 };
 
 export type UnpublishedParams = {
@@ -109,6 +125,8 @@ export type UnpublishedParams = {
   end?: string;
   gameId?: string;
   futureOnly?: boolean;
+  page?: number;
+  limit?: number;
 };
 
 export async function getUnpublishedScheduledResults(
@@ -119,6 +137,8 @@ export async function getUnpublishedScheduledResults(
   if (params?.end) search.set("end", params.end);
   if (params?.gameId) search.set("gameId", params.gameId);
   if (params?.futureOnly === true) search.set("futureOnly", "true");
+  if (params?.page != null) search.set("page", String(params.page));
+  if (params?.limit != null) search.set("limit", String(params.limit));
   const qs = search.toString();
   const url = `/api/admin/scheduled-results/unpublished${qs ? `?${qs}` : ""}`;
   const { data } = await apiClient.get<UnpublishedResponse>(url);

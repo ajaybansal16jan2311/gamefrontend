@@ -1,5 +1,6 @@
 "use client";
 
+// API calls use shared axios client via @/lib/api
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -12,6 +13,7 @@ import { toast } from "sonner";
 import { formatTimeToAMPM } from "@/lib/formatTime";
 
 const DAILY_PLANNER_QUERY_KEY = "dailyPlanner";
+const DEFAULT_PAGE_SIZE = 20;
 
 function getTodayIST(): string {
   if (typeof window === "undefined") return "";
@@ -102,6 +104,8 @@ type ModalState = {
 export default function ResultManagerPage() {
   const todayIST = getTodayIST();
   const [date, setDate] = useState("");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(DEFAULT_PAGE_SIZE);
   const [modal, setModal] = useState<ModalState>({
     open: false,
     item: null,
@@ -114,19 +118,30 @@ export default function ResultManagerPage() {
     if (!date && todayIST) setDate(todayIST);
   }, [date, todayIST]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [date, limit]);
+
   const queryClient = useQueryClient();
   const {
     data,
     isLoading: loading,
     error: queryError,
   } = useQuery({
-    queryKey: [DAILY_PLANNER_QUERY_KEY, date],
-    queryFn: () => getDailyPlanner(date),
+    queryKey: [DAILY_PLANNER_QUERY_KEY, date, page, limit],
+    queryFn: () => getDailyPlanner(date, { page, limit }),
     enabled: !!date,
     refetchOnMount: "always",
   });
 
   const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
+  const currentPage = data?.page ?? 1;
+
+  useEffect(() => {
+    if (data?.page != null && data.page !== page) setPage(data.page);
+  }, [data?.page, page]);
   const error = queryError ? (queryError instanceof Error ? queryError.message : "Failed to load results") : null;
   const isToday = date === todayIST;
 
@@ -276,8 +291,49 @@ export default function ResultManagerPage() {
                     onCountdownComplete={onCountdownComplete}
                   />
                 ))}
-              </tbody>
+                </tbody>
             </table>
+          )}
+          {!loading && items.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 bg-slate-50/50 px-5 py-3">
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-slate-600">
+                  Showing {(currentPage - 1) * limit + 1}–{Math.min(currentPage * limit, total)} of {total}
+                </span>
+                <select
+                  value={limit}
+                  onChange={(e) => setLimit(Number(e.target.value))}
+                  className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800"
+                >
+                  {[10, 20, 50, 100].map((n) => (
+                    <option key={n} value={n}>
+                      {n} per page
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage((p: number) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-slate-600">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p: number) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>

@@ -1,5 +1,7 @@
 "use client";
 
+// API calls use shared axios client via @/lib/api
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -11,6 +13,9 @@ import {
   type UnpublishedItem,
 } from "@/lib/api";
 import { formatTimeToAMPM } from "@/lib/formatTime";
+
+const UNPUBLISHED_QUERY_KEY = "unpublished";
+const DEFAULT_PAGE_SIZE = 20;
 
 function getTodayIST(): string {
   if (typeof window === "undefined") return "";
@@ -29,8 +34,57 @@ export default function GameManagerPage() {
   const [tab, setTab] = useState<Tab>("single");
   const [dateRangeStart, setDateRangeStart] = useState("");
   const [dateRangeEnd, setDateRangeEnd] = useState("");
-  const [items, setItems] = useState<UnpublishedItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(DEFAULT_PAGE_SIZE);
+  const queryClient = useQueryClient();
+
+  const {
+    data,
+    isLoading: loading,
+    error: queryError,
+    refetch,
+  } = useQuery({
+    queryKey: [UNPUBLISHED_QUERY_KEY, dateRangeStart, dateRangeEnd, page, limit],
+    queryFn: () =>
+      getUnpublishedScheduledResults({
+        start: dateRangeStart,
+        end: dateRangeEnd,
+        futureOnly: true,
+        page,
+        limit,
+      }),
+    enabled: !!dateRangeStart && !!dateRangeEnd && dateRangeStart <= dateRangeEnd,
+  });
+
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
+  const currentPage = data?.page ?? 1;
+  useEffect(() => {
+    if (queryError) {
+      const msg = queryError instanceof Error ? queryError.message : "Failed to load";
+      toast.error(msg);
+    }
+  }, [queryError]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!dateRangeStart) setDateRangeStart(getTodayIST());
+    if (!dateRangeEnd) setDateRangeEnd(getEndDateIST(3));
+  }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [dateRangeStart, dateRangeEnd, limit]);
+
+  useEffect(() => {
+    if (data?.page != null && data.page !== page) setPage(data.page);
+  }, [data?.page, page]);
+
+  const invalidateUnpublished = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: [UNPUBLISHED_QUERY_KEY] });
+  }, [queryClient]);
+
   const [editModal, setEditModal] = useState<{
     open: boolean;
     item: UnpublishedItem | null;
@@ -52,48 +106,15 @@ export default function GameManagerPage() {
   }>({ open: false, item: null, randomCode: "", userInput: "" });
   const [submitLoading, setSubmitLoading] = useState(false);
 
-  const fetchFutureSlots = useCallback(async () => {
-    const start = dateRangeStart || getTodayIST();
-    const end = dateRangeEnd || getEndDateIST(3);
-    if (!start || !end) return;
-    if (start > end) {
-      toast.error("From date must be before or equal to To date");
-      return;
-    }
-    setLoading(true);
-    try {
-      const data = await getUnpublishedScheduledResults({
-        start,
-        end,
-        futureOnly: true,
-      });
-      setItems(data.items);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to load";
-      toast.error(msg);
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [dateRangeStart, dateRangeEnd]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!dateRangeStart) setDateRangeStart(getTodayIST());
-    if (!dateRangeEnd) setDateRangeEnd(getTodayIST());
-  }, []);
-
-  useEffect(() => {
-    if (dateRangeStart && dateRangeEnd) fetchFutureSlots();
-  }, [dateRangeStart, dateRangeEnd, fetchFutureSlots]);
-
-  const uniqueGames = items.reduce<{ gameId: string; gameName: string }[]>(
-    (acc, i) => {
-      if (!acc.some((g) => g.gameId === i.gameId)) acc.push({ gameId: i.gameId, gameName: i.gameName });
-      return acc;
-    },
-    []
-  );
+  const uniqueGames =
+    data?.games ??
+    items.reduce<{ gameId: string; gameName: string }[]>(
+      (acc, i) => {
+        if (!acc.some((g) => g.gameId === i.gameId)) acc.push({ gameId: i.gameId, gameName: i.gameName });
+        return acc;
+      },
+      []
+    );
 
   const handleSingleEdit = useCallback((item: UnpublishedItem) => {
     setEditModal({ open: true, item, resultNumber: item.resultNumber ?? "" });
@@ -115,13 +136,13 @@ export default function GameManagerPage() {
       });
       toast.success(`Result updated for ${item.gameName} — ${item.date} ${formatTimeToAMPM(item.time)}`);
       setEditModal((m) => ({ ...m, open: false, item: null, resultNumber: "" }));
-      await fetchFutureSlots();
+      invalidateUnpublished();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to update");
     } finally {
       setSubmitLoading(false);
     }
-  }, [editModal, fetchFutureSlots]);
+  }, [editModal, invalidateUnpublished]);
 
   const openSingleDeleteConfirm = useCallback(
     (item: UnpublishedItem) => {
@@ -151,11 +172,11 @@ export default function GameManagerPage() {
         await cancelSlot({ gameId: item.gameId, date: item.date, time: item.time });
         toast.success("Slot cancelled");
       }
-      await fetchFutureSlots();
+      invalidateUnpublished();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to delete");
     }
-  }, [deleteConfirmSingle, fetchFutureSlots]);
+  }, [deleteConfirmSingle, invalidateUnpublished]);
 
   const handleSingleDelete = useCallback(
     async (item: UnpublishedItem) => {
@@ -167,12 +188,12 @@ export default function GameManagerPage() {
           await cancelSlot({ gameId: item.gameId, date: item.date, time: item.time });
           toast.success("Slot cancelled");
         }
-        await fetchFutureSlots();
+        invalidateUnpublished();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed to delete");
       }
     },
-    [fetchFutureSlots]
+    [invalidateUnpublished]
   );
 
   const openBulkDeleteConfirm = useCallback((gameId: string, gameName: string) => {
@@ -212,13 +233,13 @@ export default function GameManagerPage() {
         toast.success(`${parts.join(", ")} for "${gameName}"${skipMsg}`);
       }
       setDeleteConfirm((c) => ({ ...c, open: false, gameId: "", gameName: "", randomCode: "", userInput: "" }));
-      await fetchFutureSlots();
+      invalidateUnpublished();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to delete");
     } finally {
       setSubmitLoading(false);
     }
-  }, [deleteConfirm, fetchFutureSlots]);
+  }, [deleteConfirm, invalidateUnpublished]);
 
   return (
     <div className="min-h-screen bg-slate-50/80">
@@ -253,7 +274,13 @@ export default function GameManagerPage() {
             </div>
             <button
               type="button"
-              onClick={() => fetchFutureSlots()}
+              onClick={() => {
+                if (dateRangeStart > dateRangeEnd) {
+                  toast.error("From date must be before or equal to To date");
+                  return;
+                }
+                refetch();
+              }}
               className="rounded-lg bg-slate-600 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
             >
               Load
@@ -352,6 +379,47 @@ export default function GameManagerPage() {
                   ))}
                 </tbody>
               </table>
+            )}
+            {!loading && items.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 bg-slate-50/50 px-5 py-3">
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-slate-600">
+                    Showing {(currentPage - 1) * limit + 1}–{Math.min(currentPage * limit, total)} of {total}
+                  </span>
+                  <select
+                    value={limit}
+                    onChange={(e) => setLimit(Number(e.target.value))}
+                    className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800"
+                  >
+                    {[10, 20, 50, 100].map((n) => (
+                      <option key={n} value={n}>
+                        {n} per page
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPage((p: number) => Math.max(1, p - 1))}
+                    disabled={currentPage <= 1}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-slate-600">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPage((p: number) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage >= totalPages}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         )}
