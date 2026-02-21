@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Toaster } from "sonner";
+import { ChunkLoadErrorHandler } from "./ChunkLoadErrorHandler";
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -23,6 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
+        <ChunkLoadErrorHandler />
         <Providers>
           {children}
           <Toaster position="top-right" richColors closeButton />
