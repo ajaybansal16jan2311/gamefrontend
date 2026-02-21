@@ -1,6 +1,6 @@
-import { apiClient, getBaseUrl, getCsrfToken } from "./apiClient";
+import { apiClient, ensureCsrfToken, getBaseUrl, getCsrfToken } from "./apiClient";
 
-export { getBaseUrl, getCsrfToken };
+export { ensureCsrfToken, getBaseUrl, getCsrfToken };
 
 export async function login(email: string, password: string): Promise<string> {
   const { data } = await apiClient.post<{
@@ -197,6 +197,7 @@ export async function updateScheduledResultsBulk(
 }
 
 export async function hardReset(): Promise<{ ok: true; message: string }> {
+  await ensureCsrfToken();
   const { data } = await apiClient.post<{ ok: true; message: string }>(
     "/api/admin/hard-reset",
     {}

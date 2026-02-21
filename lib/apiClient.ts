@@ -30,6 +30,17 @@ const apiClient = axios.create({
   },
 });
 
+/**
+ * Fetch a fresh CSRF token from backend and store it. Call before state-changing requests if token is missing.
+ * Also used by the response interceptor to retry after 403 Invalid CSRF token.
+ */
+export async function ensureCsrfToken(): Promise<void> {
+  if (typeof window === "undefined") return;
+  const { data } = await apiClient.get<{ csrfToken?: string }>("/api/admin/csrf");
+  const token = typeof data?.csrfToken === "string" ? data.csrfToken.trim() : null;
+  if (token) sessionStorage.setItem("csrf_token", token);
+}
+
 apiClient.interceptors.request.use((config) => {
   config.baseURL = getBaseUrl();
   const csrf = getCsrfToken();
@@ -41,7 +52,19 @@ apiClient.interceptors.request.use((config) => {
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<{ message?: string }>) => {
+  async (error: AxiosError<{ message?: string }>) => {
+    const config = error.config;
+    const isCsrf403 =
+      error.response?.status === 403 &&
+      error.response?.data?.message === "Invalid CSRF token";
+    const notRetried = config && !(config as typeof config & { _csrfRetried?: boolean })._csrfRetried;
+
+    if (isCsrf403 && notRetried && config) {
+      (config as typeof config & { _csrfRetried?: boolean })._csrfRetried = true;
+      await ensureCsrfToken();
+      return apiClient.request(config);
+    }
+
     const message =
       error.response?.data?.message ??
       (error.response?.status ? `Request failed with status ${error.response.status}` : error.message) ??
