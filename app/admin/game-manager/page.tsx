@@ -28,6 +28,12 @@ function getEndDateIST(monthsAhead: number): string {
   return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
+function getEndDateByDaysIST(daysAhead: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
 type Tab = "single" | "bulk";
 
 export default function GameManagerPage() {
@@ -70,7 +76,7 @@ export default function GameManagerPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!dateRangeStart) setDateRangeStart(getTodayIST());
-    if (!dateRangeEnd) setDateRangeEnd(getEndDateIST(3));
+    if (!dateRangeEnd) setDateRangeEnd(getEndDateByDaysIST(7));
   }, []);
 
   useEffect(() => {
